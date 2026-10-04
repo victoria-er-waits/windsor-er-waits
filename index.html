@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Windsor ER waits</title>
+<style>
+  :root { --bg:#0e1a17; --card:#f6f3ec; --ink:#1a1a16; --muted:#5c584e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:17px/1.4 "Segoe UI", Helvetica, Arial, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:18px 16px 8px; color:#f6f3ec; }
+  header h1 { font-size:22px; margin:0 0 4px; }
+  header p, .note { margin:0; color:#c9d5d0; font-size:14px; }
+  main { padding:12px 14px 28px; max-width:520px; }
+  article { background:var(--card); border-radius:12px; padding:14px 14px 12px; margin:0 0 10px; }
+  h2 { font-size:16px; margin:0; }
+  .city { color:var(--muted); font-size:13px; margin:2px 0 8px; }
+  .wait { font-size:28px; font-weight:700; letter-spacing:-0.02em; }
+  .hours, .read, .drive { margin:6px 0 0; font-size:14px; color:var(--muted); }
+  .total { font-size:16px; font-weight:650; color:var(--ink); margin:8px 0 0; }
+  .note { margin-top:12px; }
+  h2.section { color:#f6f3ec; margin:18px 0 10px; font-size:18px; }
+  .note a { color:#f3d48a; }
+  .closed { color:#8a2e24; }
+  #status { color:#f3d48a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Windsor ER waits</h1>
+  <p class="note"><a href="https://buymeacoffee.com/kylethomas" target="_blank" rel="noopener noreferrer">Buy me a coffee</a>. Tip for this page. Not a hospital payment.</p>
+  <p class="note" id="updated">Last updated 9:21 p.m. PT, October 3, 2026</p>
+  <p id="status">From Windsor Regional Hospital</p>
+</header>
+<main>
+  <article>
+    <h2>Windsor Regional Hospital, Metropolitan Campus</h2>
+    <p class="city">Windsor</p>
+    <p class="wait" id="met">4 hours and 13 minutes</p>
+    <p class="drive" id="met-drive"></p>
+    <p class="hours">Open 24 hours.</p>
+    <p class="read" id="met-read">Read 9:21 p.m. PT, October 3, 2026</p>
+  </article>
+  <article>
+    <h2>Windsor Regional Hospital, Ouellette Campus</h2>
+    <p class="city">Windsor</p>
+    <p class="wait" id="oue">1 hour and 48 minutes</p>
+    <p class="drive" id="oue-drive"></p>
+    <p class="hours">Open 24 hours.</p>
+    <p class="read" id="oue-read">Read 9:21 p.m. PT, October 3, 2026</p>
+  </article>
+  <p class="note">Waits are estimates for non-urgent visits. Serious cases jump the queue. Call 911 for an emergency.</p>
+  <p class="note"><a href="https://buymeacoffee.com/kylethomas" target="_blank" rel="noopener noreferrer">Buy me a coffee</a>. A personal tip for this page. Not a hospital payment, and not a charity receipt.</p>
+  <p class="note">Source: <a href="https://www.wrh.on.ca/EmergencyWaitTimes">Windsor Regional Hospital, Emergency Wait Times</a>.</p>
+</main>
+<script>
+const SNAP = "9:21 p.m. PT, October 3, 2026";
+const SITES = [
+  ["wrm", "met"],
+  ["wro", "oue"]
+];
+function showSnap(reason) {
+  document.getElementById("status").textContent = reason;
+}
+function formatMinutes(minutes) {
+  const n = Number(minutes);
+  if (!Number.isFinite(n)) return null;
+  if (n > 59) {
+    const hours = Math.floor(n / 60);
+    const remainingMinutes = n % 60;
+    return hours + " hour" + (hours == 1 ? "" : "s") + " " + (remainingMinutes != 0 ? "and " + remainingMinutes + " minute" + (remainingMinutes == 1 ? "" : "s") : "");
+  }
+  return n + " minute" + (n == 1 ? "" : "s");
+}
+fetch("https://www.transformsso.ca/ED_Wait_Time/data/metrics.json", { cache: "no-store" })
+  .then(r => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then(data => {
+    const missing = SITES.filter(([key]) => !data[key] || data[key].mean == null);
+    if (missing.length) throw new Error("missing " + missing.map(m => m[0]).join(", "));
+    const stamp = new Date().toLocaleString("en-CA", { timeZone: "America/Vancouver", hour: "numeric", minute: "2-digit", month: "long", day: "numeric", year: "numeric" }) + " PT";
+    SITES.forEach(([key, id]) => {
+      const text = formatMinutes(data[key].mean);
+      if (!text) throw new Error("unstated " + key);
+      const el = document.getElementById(id);
+      el.textContent = text.trim();
+      el.classList.toggle("closed", /closed/i.test(text));
+      document.getElementById(id + "-read").textContent = "Read " + stamp;
+    });
+    document.getElementById("status").textContent = "Read just now from Windsor Regional Hospital.";
+  })
+  .catch(() => {
+    showSnap("Live read blocked. Windsor Regional Hospital does not send an access header, so this page cannot read the site. Last snapshot is still showing, read " + SNAP + ".");
+  });
+
+const PLACES = {
+  met: { lon: -82.9971773, lat: 42.3003268, name: "Metropolitan Campus" },
+  oue: { lon: -83.0320416, lat: 42.3084742, name: "Ouellette Campus" }
+};
+function waitMinutes(text) {
+  if (/closed/i.test(text)) return null;
+  const h = text.match(/(\d+)\s*hours?/i);
+  const m = text.match(/(\d+)\s*minutes?/i);
+  if (!h && !m) return null;
+  return (h ? Number(h[1]) : 0) * 60 + (m ? Number(m[1]) : 0);
+}
+function fmt(mins) {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h && m) return h + " h " + m + " min";
+  if (h) return h + " h";
+  return m + " min";
+}
+function showRaw(msg) {
+  document.getElementById("drive-note").textContent = msg;
+}
+function addDrive(lat, lon) {
+  const jobs = Object.entries(PLACES).map(([id, place]) => {
+    const url = "https://router.project-osrm.org/route/v1/driving/" +
+      lon + "," + lat + ";" + place.lon + "," + place.lat + "?overview=false";
+    return fetch(url).then(r => {
+      if (!r.ok) throw new Error("route " + r.status);
+      return r.json();
+    }).then(data => {
+      const sec = data && data.routes && data.routes[0] && data.routes[0].duration;
+      if (!sec && sec !== 0) throw new Error("no route");
+      const drive = Math.max(1, Math.round(sec / 60));
+      const el = document.getElementById(id);
+      const line = document.getElementById(id + "-drive");
+      const wait = waitMinutes(el.textContent);
+      if (wait == null) {
+        line.textContent = /closed/i.test(el.textContent)
+          ? "Drive about " + fmt(drive) + ". No total while closed."
+          : "Drive about " + fmt(drive) + ".";
+        return;
+      }
+      line.innerHTML = "Drive about " + fmt(drive) + ". <span class='total'>About " + fmt(wait + drive) + " with the drive.</span>";
+    });
+  });
+  return Promise.all(jobs);
+}
+const note = document.createElement("p");
+note.className = "note";
+note.id = "drive-note";
+note.textContent = "Asking for your location to add drive time.";
+document.querySelector("main").insertBefore(note, document.querySelector("main .note"));
+if (!navigator.geolocation) {
+  showRaw("Location is not available. Showing the ER wait only.");
+} else {
+  navigator.geolocation.getCurrentPosition(pos => {
+    addDrive(pos.coords.latitude, pos.coords.longitude)
+      .then(() => { note.textContent = "Drive time is from your location just now. It is added only when the department shows a wait."; })
+      .catch(() => { showRaw("Drive time could not be calculated. Showing the ER wait only."); });
+  }, () => {
+    showRaw("Location was denied. Showing the ER wait only.");
+  }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+}
+</script>
+</body>
+</html>
